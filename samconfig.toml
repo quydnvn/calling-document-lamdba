@@ -1,0 +1,3 @@
+version = 0.1
+[default.package.parameters]
+s3_prefix = "pipeline-sample"

@@ -1,0 +1,135 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  calling-document-lambda
+
+Globals:
+  Function:
+    Timeout: 3
+
+Parameters:
+  Env:
+    Type: String
+    AllowedValues:
+      - dev
+      - stg
+      - prod
+    Default: dev
+  DatabasePass:
+    Type: String
+
+
+Mappings:
+  EnvMap:
+    dev:
+      SecurityGroupIds:
+        - sg-0c8ca205876b1151b
+      SubnetIds:
+        - subnet-03cedff1c115a6168
+        - subnet-028c23434fde2562a
+      AppName: "development"
+      LambdaRegion: "us-west-2"
+      FunctionConvertDocument: "jinjerMeetingConverDocument"
+      DatabaseHost: "rds-calling-dev-migrated-aurora-cluster.cluster-cuv3yiqciyjr.us-west-2.rds.amazonaws.com"
+      DatabasePG: "caldev"
+      DatabaseName: "caldev"
+      DatabaseUser: "caldev"
+      CacheHost: "jinjer-meeting-backend-redis.tzedkn.ng.0001.usw2.cache.amazonaws.com"
+      S3BucketName: "bucket-private-calling-dev"
+      FunctionRole: "arn:aws:iam::679899427457:role/LambdaConvrertDocumentRoleJinjerMeeting"
+      OnFailure: "arn:aws:lambda:us-west-2:679899427457:function:convertDocumentFail"
+      Layers:
+        - "arn:aws:lambda:us-west-2:679899427457:layer:poppler-utils-layer:1"
+        - "arn:aws:lambda:us-west-2:679899427457:layer:gm-1-3-34-amazonelinux2:1"
+        - "arn:aws:lambda:us-west-2:679899427457:layer:node-modules-convert-pdf-new:1"
+        - "arn:aws:lambda:us-west-2:679899427457:layer:noto-v1:1"
+    stg:
+      SecurityGroupIds:
+        - sg-0bceb80d11d5bbab4
+      SubnetIds:
+        - subnet-003b9c90bfd186fb5
+        - subnet-002f56493d1eee81f
+      AppName: "staging"
+      LambdaRegion: "us-west-2"
+      FunctionConvertDocument: "jinjerMeetingConverDocument"
+      DatabaseHost: "calling-stg-aurora-postgres-cluster.cluster-cdsw1vueqixf.ap-northeast-1.rds.amazonaws.com"
+      DatabasePG: "caldev"
+      DatabaseName: "calstg"
+      DatabaseUser: "calstg"
+      CacheHost: "jinjer-platform-backend-redis.xxx.cache.amazonaws.com"
+      S3BucketName: "bucket-private-calling-dev"
+      FunctionRole: "arn:aws:iam::761390288651:role/LambdaConvrertDocumentRoleJinjerMeeting"
+      OnFailure: "arn:aws:lambda:us-west-2:761390288651:function:todo"
+      Layers:
+        - "arn:aws:lambda:ap-northeast-1:761390288651:layer:poppler-utils-layer:1"
+        - "arn:aws:lambda:ap-northeast-1:761390288651:layer:gm-1-3-34-amazonelinux2:1"
+        - "arn:aws:lambda:ap-northeast-1:761390288651:layer:node-modules-convert-pdf-new:1"
+        - "arn:aws:lambda:ap-northeast-1:761390288651:layer:noto-v1:1"
+
+Resources:
+  JinjerMeetingConvertDocument:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: jinjerMeetingConverDocument
+      CodeUri: convert-document/
+      Handler: index.handler
+      Runtime: nodejs14.x
+      Timeout: 300
+      MemorySize: 1536
+      Role: !FindInMap [ EnvMap, !Ref Env, FunctionRole ]
+      Layers: !FindInMap [ EnvMap, !Ref Env, Layers ]
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+        DestinationConfig:
+          OnFailure:
+            Type: Lambda
+            Destination: !FindInMap [ EnvMap, !Ref Env, OnFailure ]
+      VpcConfig:
+        SecurityGroupIds: !FindInMap [ EnvMap, !Ref Env, SecurityGroupIds ]
+        SubnetIds: !FindInMap [ EnvMap, !Ref Env, SubnetIds ]
+      Environment:
+        Variables:
+          APP_NAME : !FindInMap [ EnvMap, !Ref Env, AppName ]
+          DESTINATION_BUCKET : !FindInMap [ EnvMap, !Ref Env, S3BucketName ]
+          HOST_PG : !FindInMap [ EnvMap, !Ref Env, DatabaseHost ]
+          DATABASE_PG : !FindInMap [ EnvMap, !Ref Env, DatabasePG ]
+          USER_PG : !FindInMap [ EnvMap, !Ref Env, DatabaseUser ]
+          PASSWORD_PG : !Ref DatabasePass
+          PORT_PG : 5432
+          HOST_REDIS : !FindInMap [ EnvMap, !Ref Env, CacheHost ]
+          DATABASE_REDIS : 14
+          PORT_REDIS : 6379
+  JinjerMeetingConvertTalkscript:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: jinjerMeetingConverTalkscript
+      CodeUri: convert-talkscript/
+      Handler: index.handler
+      Runtime: nodejs14.x
+      Timeout: 300
+      MemorySize: 1536
+      Role: !FindInMap [ EnvMap, !Ref Env, FunctionRole ]
+      Layers: !FindInMap [ EnvMap, !Ref Env, Layers ]
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+        DestinationConfig:
+          OnFailure:
+            Type: Lambda
+            Destination: !FindInMap [ EnvMap, !Ref Env, OnFailure ]
+      VpcConfig:
+        SecurityGroupIds: !FindInMap [ EnvMap, !Ref Env, SecurityGroupIds ]
+        SubnetIds: !FindInMap [ EnvMap, !Ref Env, SubnetIds ]
+      Environment:
+        Variables:
+          APP_NAME: !FindInMap [ EnvMap, !Ref Env, AppName ]
+          DESTINATION_BUCKET: !FindInMap [ EnvMap, !Ref Env, S3BucketName ]
+          HOST_PG: !FindInMap [ EnvMap, !Ref Env, DatabaseHost ]
+          DATABASE_PG: !FindInMap [ EnvMap, !Ref Env, DatabasePG ]
+          USER_PG: !FindInMap [ EnvMap, !Ref Env, DatabaseUser ]
+          PASSWORD_PG: !Ref DatabasePass
+          PORT_PG: 5432
+          HOST_REDIS: !FindInMap [ EnvMap, !Ref Env, CacheHost ]
+          DATABASE_REDIS: 14
+          PORT_REDIS: 6379
+          FUNCTION_CONVERT_DOCUMENT: !FindInMap [ EnvMap, !Ref Env, FunctionConvertDocument ]
+          LAMBDA_REGION: !FindInMap [ EnvMap, !Ref Env, LambdaRegion ]

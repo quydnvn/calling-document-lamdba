@@ -1,0 +1,94 @@
+image: atlassian/default-image:2
+
+definitions:
+  steps:
+    - step: &trigger
+        name: Trigger
+        script:
+          - echo "Trigger"
+    - step: &deployConvertDocument
+        name: Deploy Convert Document
+        script:
+          - mv convertDocument.js index.js
+          - zip convertDocument.zip index.js
+          - pipe: atlassian/aws-lambda-deploy:0.7.0
+            variables:
+              AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+              AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+              AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+              FUNCTION_NAME: ${CONVERT_DOCUMENT_NAME}
+              COMMAND: 'update'
+              ZIP_FILE: 'convertDocument.zip'
+    - step: &deployConvertTalkScript
+        name: Deploy Convert Talkscript
+        script:
+          - mv convertTalkscript.js index.js
+          - zip convertTalkScript.zip index.js
+          - pipe: atlassian/aws-lambda-deploy:0.7.0
+            variables:
+              AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+              AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+              AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+              FUNCTION_NAME: ${CONVERT_DOCUMENT_NAME}
+              COMMAND: 'update'
+              ZIP_FILE: 'convertTalkScript.zip'
+    - step: &deployJinjerMeetingConvertFunctions
+        name: Deploy Convert Functions at JinjerMeeting
+        script:
+          - mkdir convert-document
+          - mv convertDocument.js convert-document/index.js
+          - mkdir convert-talkscript
+          - mv convertTalkscript.js convert-talkscript/index.js
+          - pipe: atlassian/aws-sam-deploy:1.2.0
+            variables:
+              AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+              AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+              AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+              S3_BUCKET: ${S3_BUCKET}
+              STACK_NAME: 'jinjer-meeting-convert-functions'
+              SAM_CONFIG: 'samconfig.toml'
+              CAPABILITIES: ['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND']
+              STACK_PARAMETERS: >
+                [
+                  {
+                    "ParameterKey": "Env",
+                    "ParameterValue": ${DEPLOY_ENV}
+                  },
+                  {
+                    "ParameterKey": "DatabasePass",
+                    "ParameterValue": ${DATABASE_PASS}
+                  }
+                ]
+
+pipelines:
+  branches:
+    develop:
+      - parallel:
+          - step:
+              <<: *deployConvertDocument
+              deployment: DevelopDocument
+          - step:
+              <<: *deployConvertTalkScript
+              deployment: DevelopTalkScript
+          - step:
+              <<: *deployJinjerMeetingConvertFunctions
+              deployment: DevelopJinjerMeetingFunctions
+    staging:
+      - parallel:
+          - step:
+              <<: *deployConvertDocument
+              deployment: StagingDocument
+          - step:
+              <<: *deployConvertTalkScript
+              deployment: StagingTalkScript
+    master:
+      - step:
+          <<: *trigger
+          trigger: manual
+      - parallel:
+          - step:
+              <<: *deployConvertDocument
+              deployment: ProductionDocument
+          - step:
+              <<: *deployConvertTalkScript
+              deployment: ProductionTalkScript
